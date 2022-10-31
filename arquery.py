@@ -24,6 +24,7 @@ class arquery:
         )
         soup = BeautifulSoup(response.text, "html.parser")
 
+        # Parse all the session info to use for subsequent posts
         viewstate = soup.find(attrs={"name": "__VIEWSTATE"})["value"]
         viewstategenerator = soup.find(attrs={"name": "__VIEWSTATEGENERATOR"})["value"]
         eventvalidation = soup.find(attrs={"name": "__EVENTVALIDATION"})["value"]
@@ -31,11 +32,6 @@ class arquery:
         viewstate = urllib.parse.quote(viewstate)
         viewstategenerator = urllib.parse.quote(viewstategenerator)
         eventvalidation = urllib.parse.quote(eventvalidation)
-
-        """params = {
-            "ctl00%24cp_Content%24tbUserName": username,
-            "ctl00%24cp_Content%24tbPassword": password,
-        }"""
 
         payload = (
             f"__LASTFOCUS=&__EVENTTARGET=ctl00%24cp_Content%24btnLogIn&__EVENTARGUMENT="
@@ -57,9 +53,9 @@ class arquery:
 
 
     def get_all_books(self, school_id):
-
         all_books = []
 
+        # Get the first page of books
         response = self.session.get(
             f"https://auhosted4.renlearn.com.au/{school_id}/AR/StudentApp/Bookshelf.aspx"
         )
@@ -69,6 +65,7 @@ class arquery:
 
         soup = BeautifulSoup(response.text, "html.parser")
 
+        # Parse all the session info to use for subsequent posts
         viewstate = soup.find(attrs={"name": "__VIEWSTATE"})["value"]
         viewstategenerator = soup.find(attrs={"name": "__VIEWSTATEGENERATOR"})["value"]
         eventvalidation = soup.find(attrs={"name": "__EVENTVALIDATION"})["value"]
@@ -77,7 +74,7 @@ class arquery:
         viewstategenerator = urllib.parse.quote(viewstategenerator)
         eventvalidation = urllib.parse.quote(eventvalidation)
 
-        # Assuming we never need to go above 100!
+        # Get all subsequent pages (up to 100)
         for page in range(0,100):
             print(f"Page: {page}")
             payload = (
@@ -97,23 +94,23 @@ class arquery:
             )
 
             soup = BeautifulSoup(response.text, "html.parser")
-
             book_ids = [id.attrs['data-id'] for id in soup.find_all(attrs={"id":"dBook"})]
-
             all_book_ids.extend(book_ids)
 
+            # Exit when we're on the last page
             if soup.find('a', attrs={"id": "ctl00_content_pnSearchHeader_mLinkButton_Next"}).get("disabled") == "disabled":
                 break
         
         print(len(all_book_ids))
 
+        b = 0
         for book_id in all_book_ids:
-            url = url="https://auhosted4.renlearn.com.au/1454662/AR/StudentApp/BookScore.aspx?i=" + book_id
-            # print(url)
+            print(f"Retrieving book {b} - i = {book_id}")
+            url = url=f"https://auhosted4.renlearn.com.au/{school_id}/AR/StudentApp/BookScore.aspx?i=" + book_id
             response = self.session.get(url=url, verify=False, allow_redirects=False)
             print(str(response.status_code) + " - " + str(len(response.text)) + " - " + url)
             
-            # retry 5 times, with 5 second pauses
+            # retry up to 5 times, with 5 second pauses
             if response.status_code == 302:
                 for i in (1,5):
                     time.sleep(5)
@@ -131,7 +128,9 @@ class arquery:
             try:
                 title = soup.find(attrs={"id":"ctl00_content_bookDetails_dTitle"}).text
             except Exception as e:
+                # This shouldn't happen - we got a response but no reference to the book title
                 print(e)
+
             author = soup.find(attrs={"id":"ctl00_content_bookDetails_dAuthor"}).text
             book_number = soup.find(attrs={"id":"ctl00_content_bookDetails_rptDetails_ctl00_spValue"}).text
             word_count = soup.find(attrs={"id":"ctl00_content_rptScore_ctl02_valueBox_dValue"}).text
@@ -139,6 +138,7 @@ class arquery:
                 word_count = word_count("text")
 
             all_books.append({"title": title, "author": author, "book_number": book_number, "word_count": word_count})
+            b += 1
             
         return all_books
 
